@@ -7,6 +7,7 @@ import scala.util.chaining.scalaUtilChainingOps
 import zio.Runtime.default.unsafeRun
 import zio.Task
 import zio.Task.{effect, succeed}
+import zio.IO
 import zio.IO.fromOption
 
 case class Character(name: String, age: Int)
@@ -21,31 +22,29 @@ val _ = unsafeRun(
     ).toCommands.execute
   yield ()
 )
-
-def getCharacters: List[Character] =
-  unsafeRun(for
+object NoCharacters extends Throwable
+def getCharacters: Task[Seq[Character]] =
+  for
     rawCharacters <- "select name, age from characters".toQuery.results
     characters <- rawCharacters.map(character => Character(
       name = character.get("name", classOf[String]),
       age = character.get("age", classOf[Integer]).toInt
     )).pipe(effect(_))
-  yield characters.toList)
-def getCharacter(name: String): Option[Character] =
-  unsafeRun(
-    (for
-      characters <- s"select name, age from characters where name = $name".toQuery.results
-      rawCharacter <- characters.headOption.pipe(fromOption(_))
-      character <- Character(
-        name = rawCharacter.get("name", classOf[String]),
-        age = rawCharacter.get("age", classOf[Integer]).toInt
-      ).pipe(effect(_))
-    yield character).either
-  ).toOption
+  yield characters.toSeq
+def getCharacter(name: String): Task[Character] =
+  for
+    characters <- s"select name, age from characters where name = $name".toQuery.results
+    rawCharacter <- characters.headOption.pipe(fromOption(_)).mapError(_ => NoCharacters)
+    character <- Character(
+      name = rawCharacter.get("name", classOf[String]),
+      age = rawCharacter.get("age", classOf[Integer]).toInt
+    ).pipe(effect(_))
+  yield character
 
 case class CharacterName(name: String)
 case class Queries(
-  characters: List[Character],
-  character: CharacterName => Option[Character]
+  characters: Task[Seq[Character]],
+  character: CharacterName => Task[Character]
 )
 case class CharacterArgs(name: String)
 case class Mutations(deleteCharacter: CharacterArgs => Task[Boolean])

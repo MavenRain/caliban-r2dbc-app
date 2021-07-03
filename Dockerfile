@@ -1,4 +1,4 @@
-FROM openjdk:8u232
+FROM openjdk:8u281
 
 ARG SBT_VERSION=1.5.4
 
